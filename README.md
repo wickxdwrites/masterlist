@@ -29,3 +29,17 @@ Standalone React + Vite project for tracking personal edit logs and revisions.
    git branch -M main
    git remote add origin https://github.com/<your-username>/edits-vault.git
    git push -u origin main
+
+## Deploy to GitHub Pages
+
+This repository includes a workflow at `.github/workflows/deploy-pages.yml` that
+builds and deploys the app when you push to `main`.
+
+1. In GitHub, open your repository settings.
+2. Go to Pages.
+3. Under Build and deployment, set Source to GitHub Actions.
+4. Push to `main`.
+
+Expected URL for this repository:
+
+https://wickxdwrites.github.io/masterlist/
