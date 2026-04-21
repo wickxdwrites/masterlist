@@ -85,6 +85,19 @@
   grid-column: 1 / -1;
 }
 
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  align-self: end;
+  min-height: 40px;
+}
+
+.checkbox-row input {
+  width: 18px;
+  height: 18px;
+}
+
 input,
 select,
 textarea,
@@ -141,6 +154,29 @@ button {
   flex: 1 1 280px;
 }
 
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.8rem;
+}
+
+.tab {
+  white-space: nowrap;
+  background: #f8f5ed;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  padding: 0.55rem 0.85rem;
+  border-radius: 999px;
+}
+
+.tab.active {
+  background: var(--brand);
+  color: #fff;
+  border-color: var(--brand);
+}
+
 .import-pill {
   display: inline-flex;
   align-items: center;
@@ -166,22 +202,14 @@ button {
   gap: 0.7rem;
 }
 
-.category-sections {
-  display: grid;
-  gap: 1rem;
-}
-
-.category-block {
-  border-top: 1px solid var(--line);
-  padding-top: 0.8rem;
-}
-
 .category-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
   margin-bottom: 0.7rem;
+  border-top: 1px solid var(--line);
+  padding-top: 0.8rem;
 }
 
 .category-head h3 {
@@ -208,6 +236,10 @@ button {
   animation: rise 320ms ease;
 }
 
+.entry-card.completed {
+  background: #f2f6f2;
+}
+
 .entry-head {
   display: flex;
   justify-content: space-between;
@@ -218,6 +250,22 @@ button {
 .entry-head strong {
   color: var(--ink);
   font-size: 1.05rem;
+}
+
+.name-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.name-check input {
+  width: 18px;
+  height: 18px;
+}
+
+.entry-card.completed .name-check strong {
+  text-decoration: line-through;
+  color: var(--muted);
 }
 
 .file-pill {
@@ -245,6 +293,31 @@ button {
   padding: 0.18rem 0.55rem;
   background: var(--cloud);
   text-transform: uppercase;
+}
+
+.member-dropdown {
+  margin-top: 0.45rem;
+}
+
+.member-dropdown summary {
+  cursor: pointer;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.member-dropdown ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1rem;
+}
+
+.solo-pill {
+  margin-top: 0.45rem;
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 0.15rem 0.5rem;
+  background: rgba(47, 116, 140, 0.16);
+  font-weight: 700;
+  font-size: 0.78rem;
 }
 
 .chip.open {

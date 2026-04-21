@@ -17,6 +17,8 @@ const defaultForm = {
   name: '',
   specialty: '',
   category: CATEGORY_OPTIONS[0],
+  members: '',
+  isSoloist: false,
   notes: '',
   tags: '',
 }
@@ -32,6 +34,9 @@ const normalizeEntry = (entry) => {
     name: entry.name || entry.project || '',
     specialty: entry.specialty || entry.file || '',
     category,
+    members: entry.members || '',
+    isSoloist: Boolean(entry.isSoloist),
+    done: Boolean(entry.done),
     notes: entry.notes || '',
     tags: entry.tags || '',
   }
@@ -41,7 +46,7 @@ function App() {
   const [entries, setEntries] = useState([])
   const [form, setForm] = useState(defaultForm)
   const [search, setSearch] = useState('')
-  const [categoryFilter, setCategoryFilter] = useState('all')
+  const [activeCategory, setActiveCategory] = useState(CATEGORY_OPTIONS[0])
   const [sortDirection, setSortDirection] = useState('desc')
 
   useEffect(() => {
@@ -69,14 +74,21 @@ function App() {
 
     return entries
       .filter((entry) => {
-        if (categoryFilter !== 'all' && entry.category !== categoryFilter) {
+        if (entry.category !== activeCategory) {
           return false
         }
         if (!searchQuery) {
           return true
         }
 
-        return [entry.name, entry.specialty, entry.notes, entry.tags, entry.category]
+        return [
+          entry.name,
+          entry.specialty,
+          entry.members,
+          entry.notes,
+          entry.tags,
+          entry.category,
+        ]
           .join(' ')
           .toLowerCase()
           .includes(searchQuery)
@@ -86,15 +98,7 @@ function App() {
         const bTime = new Date(b.date).getTime()
         return sortDirection === 'desc' ? bTime - aTime : aTime - bTime
       })
-  }, [categoryFilter, entries, search, sortDirection])
-
-  const groupedEntries = useMemo(() => {
-    const grouped = Object.fromEntries(CATEGORY_OPTIONS.map((name) => [name, []]))
-    filteredEntries.forEach((entry) => {
-      grouped[entry.category].push(entry)
-    })
-    return grouped
-  }, [filteredEntries])
+  }, [activeCategory, entries, search, sortDirection])
 
   const stats = useMemo(() => {
     const filledCategories = CATEGORY_OPTIONS.filter(
@@ -121,8 +125,11 @@ function App() {
   }, [entries])
 
   const handleChange = (event) => {
-    const { name, value } = event.target
-    setForm((current) => ({ ...current, [name]: value }))
+    const { name, value, type, checked } = event.target
+    setForm((current) => ({
+      ...current,
+      [name]: type === 'checkbox' ? checked : value,
+    }))
   }
 
   const handleAddEntry = (event) => {
@@ -143,12 +150,28 @@ function App() {
       ...form,
       name: form.name.trim(),
       specialty: form.specialty.trim(),
+      members: form.members.trim(),
       notes: form.notes.trim(),
       tags: normalizedTags,
+      done: false,
     }
 
     setEntries((current) => [newEntry, ...current])
-    setForm({ ...defaultForm, date: form.date })
+    setForm({ ...defaultForm, date: form.date, category: form.category })
+  }
+
+  const toggleDone = (id) => {
+    setEntries((current) =>
+      current.map((entry) => {
+        if (entry.id !== id) {
+          return entry
+        }
+        return {
+          ...entry,
+          done: !entry.done,
+        }
+      }),
+    )
   }
 
   const removeEntry = (id) => {
@@ -180,7 +203,7 @@ function App() {
         if (!Array.isArray(parsed)) {
           return
         }
-        setEntries(parsed)
+        setEntries(parsed.map(normalizeEntry))
       } catch {
         // Ignore malformed imports to avoid overwriting existing data.
       }
@@ -253,6 +276,17 @@ function App() {
             />
           </label>
           <label>
+            Group Members
+            <input
+              type="text"
+              name="members"
+              placeholder="comma separated member names"
+              value={form.members}
+              onChange={handleChange}
+              disabled={form.isSoloist}
+            />
+          </label>
+          <label>
             Category
             <select name="category" value={form.category} onChange={handleChange}>
               {CATEGORY_OPTIONS.map((category) => (
@@ -261,6 +295,15 @@ function App() {
                 </option>
               ))}
             </select>
+          </label>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              name="isSoloist"
+              checked={form.isSoloist}
+              onChange={handleChange}
+            />
+            Soloist
           </label>
           <label className="wide">
             Notes
@@ -287,25 +330,28 @@ function App() {
       </section>
 
       <section className="panel" aria-label="Filter and browse entries">
+        <div className="tabs" role="tablist" aria-label="Celebrity categories">
+          {CATEGORY_OPTIONS.map((category) => (
+            <button
+              key={category}
+              type="button"
+              role="tab"
+              className={`tab ${activeCategory === category ? 'active' : ''}`}
+              aria-selected={activeCategory === category}
+              onClick={() => setActiveCategory(category)}
+            >
+              {category}
+            </button>
+          ))}
+        </div>
+
         <div className="toolbar">
           <input
             type="search"
-            placeholder="Search notes, files, tags"
+            placeholder="Search names, members, notes, tags"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
-
-          <select
-            value={categoryFilter}
-            onChange={(event) => setCategoryFilter(event.target.value)}
-          >
-            <option value="all">All Categories</option>
-            {CATEGORY_OPTIONS.map((category) => (
-              <option key={category} value={category}>
-                {category}
-              </option>
-            ))}
-          </select>
 
           <button
             type="button"
@@ -329,52 +375,63 @@ function App() {
           </label>
         </div>
 
-        <div className="category-sections">
-          {CATEGORY_OPTIONS.map((category) => {
-            const categoryEntries = groupedEntries[category]
-            if (categoryEntries.length === 0) {
-              return null
-            }
-
-            return (
-              <section key={category} className="category-block">
-                <div className="category-head">
-                  <h3>{category}</h3>
-                  <span className="category-count">{categoryEntries.length}</span>
-                </div>
-
-                <ul className="entry-list">
-                  {categoryEntries.map((entry) => (
-                    <li key={entry.id} className="entry-card">
-                      <div className="entry-head">
-                        <strong>{entry.name}</strong>
-                        <span>{entry.date}</span>
-                      </div>
-
-                      {entry.specialty && <p className="file-pill">{entry.specialty}</p>}
-                      {entry.notes && <p>{entry.notes}</p>}
-
-                      <div className="chip-row">
-                        <span className="chip">{entry.category}</span>
-                        {entry.tags && <span className="chip">{entry.tags}</span>}
-                      </div>
-
-                      <div className="actions">
-                        <button
-                          type="button"
-                          className="danger"
-                          onClick={() => removeEntry(entry.id)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )
-          })}
+        <div className="category-head">
+          <h3>{activeCategory}</h3>
+          <span className="category-count">{filteredEntries.length}</span>
         </div>
+
+        <ul className="entry-list">
+          {filteredEntries.map((entry) => (
+            <li key={entry.id} className={`entry-card ${entry.done ? 'completed' : ''}`}>
+              <div className="entry-head">
+                <label className="name-check">
+                  <input
+                    type="checkbox"
+                    checked={entry.done}
+                    onChange={() => toggleDone(entry.id)}
+                  />
+                  <strong>{entry.name}</strong>
+                </label>
+                <span>{entry.date}</span>
+              </div>
+
+              {entry.specialty && <p className="file-pill">{entry.specialty}</p>}
+
+              {!entry.isSoloist && entry.members && (
+                <details className="member-dropdown">
+                  <summary>Members</summary>
+                  <ul>
+                    {entry.members
+                      .split(',')
+                      .map((member) => member.trim())
+                      .filter(Boolean)
+                      .map((member) => (
+                        <li key={`${entry.id}-${member}`}>{member}</li>
+                      ))}
+                  </ul>
+                </details>
+              )}
+
+              {entry.isSoloist && <p className="solo-pill">Soloist</p>}
+              {entry.notes && <p>{entry.notes}</p>}
+
+              <div className="chip-row">
+                <span className="chip">{entry.category}</span>
+                {entry.tags && <span className="chip">{entry.tags}</span>}
+              </div>
+
+              <div className="actions">
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={() => removeEntry(entry.id)}
+                >
+                  Delete
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
 
         {filteredEntries.length === 0 && (
           <p className="empty-state">No entries match your current filters.</p>
