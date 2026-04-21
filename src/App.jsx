@@ -6,17 +6,48 @@ const STORAGE_KEY = 'edits-vault-entries-v1'
 const CATEGORY_OPTIONS = [
   { key: 'K-pop groups and soloists', label: 'kpop' },
   { key: 'K-Actors and actresses', label: 'kActor' },
-  { key: 'Thai pop artists', label: 'thaiPop' },
-  { key: 'Thai Actors and Actresses', label: 'thaiActor' },
-  { key: 'Chinese Singers and actors/actresses', label: 'cPop' },
-  { key: 'Japanese singers and actors/actresses', label: 'jPop' },
+  { key: 'Thai singers', label: 'tSinger' },
+  { key: 'Thai Actors and Actresses', label: 'tActor' },
+  { key: 'Chinese singers', label: 'cSinger' },
+  { key: 'Chinese Actors and Actresses', label: 'cActor' },
+  { key: 'Japanese singers', label: 'jSinger' },
+  { key: 'Japanese Actors and Actresses', label: 'jActor' },
 ]
 
 const categoryKeys = CATEGORY_OPTIONS.map((item) => item.key)
 
+const looksActingProfile = (entry) => {
+  const combinedText = [entry.specialty, entry.notes, entry.tags]
+    .join(' ')
+    .toLowerCase()
+
+  return /(actor|actress|drama|movie|film|series|show)/.test(combinedText)
+}
+
+const mapLegacyCategory = (entry) => {
+  if (entry.category === 'Thai pop artists') {
+    return 'Thai singers'
+  }
+
+  if (entry.category === 'Chinese Singers and actors/actresses') {
+    return looksActingProfile(entry)
+      ? 'Chinese Actors and Actresses'
+      : 'Chinese singers'
+  }
+
+  if (entry.category === 'Japanese singers and actors/actresses') {
+    return looksActingProfile(entry)
+      ? 'Japanese Actors and Actresses'
+      : 'Japanese singers'
+  }
+
+  return entry.category
+}
+
 const normalizeEntry = (entry) => {
-  const category = categoryKeys.includes(entry.category)
-    ? entry.category
+  const categoryCandidate = mapLegacyCategory(entry)
+  const category = categoryKeys.includes(categoryCandidate)
+    ? categoryCandidate
     : categoryKeys[0]
 
   return {
