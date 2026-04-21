@@ -3,22 +3,45 @@ import './App.css'
 
 const STORAGE_KEY = 'edits-vault-entries-v1'
 
+const CATEGORY_OPTIONS = [
+  'K-pop groups and soloists',
+  'K-Actors and actresses',
+  'Thai pop artists',
+  'Thai Actors and Actresses',
+  'Chinese Singers and actors/actresses',
+  'Japanese singers and actors/actresses',
+]
+
 const defaultForm = {
   date: new Date().toISOString().slice(0, 10),
-  project: '',
-  file: '',
-  category: 'revision',
-  status: 'open',
+  name: '',
+  specialty: '',
+  category: CATEGORY_OPTIONS[0],
   notes: '',
   tags: '',
+}
+
+const normalizeEntry = (entry) => {
+  const category = CATEGORY_OPTIONS.includes(entry.category)
+    ? entry.category
+    : CATEGORY_OPTIONS[0]
+
+  return {
+    id: entry.id || crypto.randomUUID(),
+    date: entry.date || new Date().toISOString().slice(0, 10),
+    name: entry.name || entry.project || '',
+    specialty: entry.specialty || entry.file || '',
+    category,
+    notes: entry.notes || '',
+    tags: entry.tags || '',
+  }
 }
 
 function App() {
   const [entries, setEntries] = useState([])
   const [form, setForm] = useState(defaultForm)
   const [search, setSearch] = useState('')
-  const [projectFilter, setProjectFilter] = useState('all')
-  const [statusFilter, setStatusFilter] = useState('all')
+  const [categoryFilter, setCategoryFilter] = useState('all')
   const [sortDirection, setSortDirection] = useState('desc')
 
   useEffect(() => {
@@ -30,7 +53,7 @@ function App() {
     try {
       const parsed = JSON.parse(raw)
       if (Array.isArray(parsed)) {
-        setEntries(parsed)
+        setEntries(parsed.map(normalizeEntry))
       }
     } catch {
       window.localStorage.removeItem(STORAGE_KEY)
@@ -41,27 +64,19 @@ function App() {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(entries))
   }, [entries])
 
-  const projects = useMemo(
-    () => Array.from(new Set(entries.map((entry) => entry.project))).sort(),
-    [entries],
-  )
-
   const filteredEntries = useMemo(() => {
     const searchQuery = search.trim().toLowerCase()
 
     return entries
       .filter((entry) => {
-        if (projectFilter !== 'all' && entry.project !== projectFilter) {
-          return false
-        }
-        if (statusFilter !== 'all' && entry.status !== statusFilter) {
+        if (categoryFilter !== 'all' && entry.category !== categoryFilter) {
           return false
         }
         if (!searchQuery) {
           return true
         }
 
-        return [entry.project, entry.file, entry.notes, entry.tags]
+        return [entry.name, entry.specialty, entry.notes, entry.tags, entry.category]
           .join(' ')
           .toLowerCase()
           .includes(searchQuery)
@@ -71,16 +86,37 @@ function App() {
         const bTime = new Date(b.date).getTime()
         return sortDirection === 'desc' ? bTime - aTime : aTime - bTime
       })
-  }, [entries, projectFilter, search, sortDirection, statusFilter])
+  }, [categoryFilter, entries, search, sortDirection])
+
+  const groupedEntries = useMemo(() => {
+    const grouped = Object.fromEntries(CATEGORY_OPTIONS.map((name) => [name, []]))
+    filteredEntries.forEach((entry) => {
+      grouped[entry.category].push(entry)
+    })
+    return grouped
+  }, [filteredEntries])
 
   const stats = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10)
+    const filledCategories = CATEGORY_OPTIONS.filter(
+      (category) => entries.filter((entry) => entry.category === category).length > 0,
+    ).length
+
+    let topCategory = 'None yet'
+    let topCount = 0
+    CATEGORY_OPTIONS.forEach((category) => {
+      const count = entries.filter((entry) => entry.category === category).length
+      if (count > topCount) {
+        topCount = count
+        topCategory = category
+      }
+    })
 
     return {
       total: entries.length,
-      today: entries.filter((entry) => entry.date === today).length,
-      open: entries.filter((entry) => entry.status === 'open').length,
-      closed: entries.filter((entry) => entry.status === 'closed').length,
+      categories: CATEGORY_OPTIONS.length,
+      filledCategories,
+      topCategory,
+      topCount,
     }
   }, [entries])
 
@@ -92,7 +128,7 @@ function App() {
   const handleAddEntry = (event) => {
     event.preventDefault()
 
-    if (!form.project.trim() || !form.file.trim() || !form.notes.trim()) {
+    if (!form.name.trim()) {
       return
     }
 
@@ -105,30 +141,14 @@ function App() {
     const newEntry = {
       id: crypto.randomUUID(),
       ...form,
-      project: form.project.trim(),
-      file: form.file.trim(),
+      name: form.name.trim(),
+      specialty: form.specialty.trim(),
       notes: form.notes.trim(),
       tags: normalizedTags,
-      createdAt: new Date().toISOString(),
     }
 
     setEntries((current) => [newEntry, ...current])
     setForm({ ...defaultForm, date: form.date })
-  }
-
-  const toggleStatus = (id) => {
-    setEntries((current) =>
-      current.map((entry) => {
-        if (entry.id !== id) {
-          return entry
-        }
-
-        return {
-          ...entry,
-          status: entry.status === 'open' ? 'closed' : 'open',
-        }
-      }),
-    )
   }
 
   const removeEntry = (id) => {
@@ -174,34 +194,33 @@ function App() {
     <main className="vault-shell">
       <header className="hero">
         <p className="eyebrow">Standalone Personal Site</p>
-        <h1>Edit Vault</h1>
+        <h1>Entertainment Master List</h1>
         <p>
-          A private, local-first archive for tracking revisions, fixes, and
-          editorial notes.
+          A category-first database for artists, singers, actors, and actresses.
         </p>
       </header>
 
       <section className="stats-grid" aria-label="Summary">
         <article>
-          <h2>Total Entries</h2>
+          <h2>Total Profiles</h2>
           <p>{stats.total}</p>
         </article>
         <article>
-          <h2>Added Today</h2>
-          <p>{stats.today}</p>
+          <h2>Categories Used</h2>
+          <p>{stats.filledCategories}</p>
         </article>
         <article>
-          <h2>Open Tasks</h2>
-          <p>{stats.open}</p>
+          <h2>Category Slots</h2>
+          <p>{stats.categories}</p>
         </article>
         <article>
-          <h2>Closed Tasks</h2>
-          <p>{stats.closed}</p>
+          <h2>Largest Category</h2>
+          <p>{stats.topCount}</p>
         </article>
       </section>
 
       <section className="panel" aria-label="Create entry">
-        <h2>Log New Edit</h2>
+        <h2>Add New Person or Group</h2>
         <form className="entry-form" onSubmit={handleAddEntry}>
           <label>
             Date
@@ -213,41 +232,34 @@ function App() {
             />
           </label>
           <label>
-            Project
+            Name
             <input
               type="text"
-              name="project"
-              placeholder="AEHB, blog, client site"
-              value={form.project}
+              name="name"
+              placeholder="e.g. IU, NCT, Kim Soo-hyun"
+              value={form.name}
               onChange={handleChange}
               required
             />
           </label>
           <label>
-            File or Section
+            Specialty
             <input
               type="text"
-              name="file"
-              placeholder="chapter4.js or Intro section"
-              value={form.file}
+              name="specialty"
+              placeholder="Singer, actor, group, actress"
+              value={form.specialty}
               onChange={handleChange}
-              required
             />
           </label>
           <label>
             Category
             <select name="category" value={form.category} onChange={handleChange}>
-              <option value="revision">Revision</option>
-              <option value="proofread">Proofread</option>
-              <option value="rewrite">Rewrite</option>
-              <option value="metadata">Metadata</option>
-            </select>
-          </label>
-          <label>
-            Status
-            <select name="status" value={form.status} onChange={handleChange}>
-              <option value="open">Open</option>
-              <option value="closed">Closed</option>
+              {CATEGORY_OPTIONS.map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
+              ))}
             </select>
           </label>
           <label className="wide">
@@ -255,10 +267,9 @@ function App() {
             <textarea
               name="notes"
               rows="3"
-              placeholder="What changed and why?"
+              placeholder="Any details you want to keep for this entry"
               value={form.notes}
               onChange={handleChange}
-              required
             />
           </label>
           <label className="wide">
@@ -266,7 +277,7 @@ function App() {
             <input
               type="text"
               name="tags"
-              placeholder="character arc, pacing, typo"
+              placeholder="comma separated: OST, drama, bias, variety"
               value={form.tags}
               onChange={handleChange}
             />
@@ -285,24 +296,15 @@ function App() {
           />
 
           <select
-            value={projectFilter}
-            onChange={(event) => setProjectFilter(event.target.value)}
+            value={categoryFilter}
+            onChange={(event) => setCategoryFilter(event.target.value)}
           >
-            <option value="all">All Projects</option>
-            {projects.map((project) => (
-              <option key={project} value={project}>
-                {project}
+            <option value="all">All Categories</option>
+            {CATEGORY_OPTIONS.map((category) => (
+              <option key={category} value={category}>
+                {category}
               </option>
             ))}
-          </select>
-
-          <select
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value)}
-          >
-            <option value="all">All Statuses</option>
-            <option value="open">Open</option>
-            <option value="closed">Closed</option>
           </select>
 
           <button
@@ -327,38 +329,52 @@ function App() {
           </label>
         </div>
 
-        <ul className="entry-list">
-          {filteredEntries.map((entry) => (
-            <li key={entry.id} className="entry-card">
-              <div className="entry-head">
-                <strong>{entry.project}</strong>
-                <span>{entry.date}</span>
-              </div>
+        <div className="category-sections">
+          {CATEGORY_OPTIONS.map((category) => {
+            const categoryEntries = groupedEntries[category]
+            if (categoryEntries.length === 0) {
+              return null
+            }
 
-              <p className="file-pill">{entry.file}</p>
-              <p>{entry.notes}</p>
+            return (
+              <section key={category} className="category-block">
+                <div className="category-head">
+                  <h3>{category}</h3>
+                  <span className="category-count">{categoryEntries.length}</span>
+                </div>
 
-              <div className="chip-row">
-                <span className="chip">{entry.category}</span>
-                {entry.tags && <span className="chip">{entry.tags}</span>}
-                <span className={`chip ${entry.status}`}>{entry.status}</span>
-              </div>
+                <ul className="entry-list">
+                  {categoryEntries.map((entry) => (
+                    <li key={entry.id} className="entry-card">
+                      <div className="entry-head">
+                        <strong>{entry.name}</strong>
+                        <span>{entry.date}</span>
+                      </div>
 
-              <div className="actions">
-                <button type="button" onClick={() => toggleStatus(entry.id)}>
-                  Toggle Status
-                </button>
-                <button
-                  type="button"
-                  className="danger"
-                  onClick={() => removeEntry(entry.id)}
-                >
-                  Delete
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
+                      {entry.specialty && <p className="file-pill">{entry.specialty}</p>}
+                      {entry.notes && <p>{entry.notes}</p>}
+
+                      <div className="chip-row">
+                        <span className="chip">{entry.category}</span>
+                        {entry.tags && <span className="chip">{entry.tags}</span>}
+                      </div>
+
+                      <div className="actions">
+                        <button
+                          type="button"
+                          className="danger"
+                          onClick={() => removeEntry(entry.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )
+          })}
+        </div>
 
         {filteredEntries.length === 0 && (
           <p className="empty-state">No entries match your current filters.</p>
