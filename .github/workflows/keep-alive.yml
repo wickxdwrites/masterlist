@@ -23,6 +23,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Debug environment
+        run: |
+          echo "PWD: $(pwd)"
+          echo "Node version:" && node --version || true
+          echo "NPM version:" && npm --version || true
+          echo "Listing repo root files:" && ls -la || true
+          echo "Contents of package.json:" && sed -n '1,120p' package.json || true
+          echo "Checking node_modules presence:" && ls -la node_modules || true
+          echo "Checking @supabase directory:" && ls -la node_modules/@supabase || true
+          echo "Attempting dynamic import of @supabase/supabase-js"
+          node -e "import('@supabase/supabase-js').then(()=>console.log('import ok')).catch(e=>{console.error('dynamic import failed:', e.message||e); process.exit(1)})"
+        shell: bash
+
       - name: Keep Supabase active
         run: node .github/scripts/supabase-keep-alive.js
         env:
