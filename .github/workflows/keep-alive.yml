@@ -23,6 +23,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Ensure supabase client is installed
+        run: |
+          echo "Installing @supabase/supabase-js to ensure it's available on the runner"
+          npm install @supabase/supabase-js --no-save --no-audit --no-fund
+        shell: bash
+
       - name: Debug environment
         run: |
           echo "PWD: $(pwd)"
