@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+    outputs:
+      error_message: ${{ steps.keepalive.outputs.error_message }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,7 +26,16 @@ jobs:
         run: npm ci
 
       - name: Keep Supabase active
-        run: node .github/scripts/supabase-keep-alive.js
+        id: keepalive
+        run: |
+          set -o pipefail
+          output=$(node .github/scripts/supabase-keep-alive.js 2>&1) || rc=$?
+          echo "error_message<<EOF" >> $GITHUB_OUTPUT
+          echo "$output" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          if [ -n "${rc:-}" ]; then
+            exit $rc
+          fi
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
@@ -41,11 +52,20 @@ jobs:
           REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+          ERROR_MESSAGE: ${{ needs.keep-supabase-active.outputs.error_message }}
         run: |
           if [ -z "$DISCORD_WEBHOOK" ]; then
             echo "DISCORD_WEBHOOK secret is not set. Skipping notification."
             exit 0
           fi
-          payload=$(printf '{"content":"[Keep-alive] Workflow failed for %s\n%s\nJob: keep-supabase-active\nCommit: %s"}' "$REPO" "$RUN_URL" "$SHA")
+          # prepare a compact, escape-safe error snippet
+          ERROR_ESCAPED=$(echo "$ERROR_MESSAGE" | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+          ERROR_TRUNC=$(echo "$ERROR_ESCAPED" | cut -c1-800)
+          TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          payload=$(cat <<EOF
+{"embeds":[{"title":"Keep-alive Failure","description":"A scheduled keep-alive workflow failed — brief details below.","color":15158332,"fields":[{"name":"Repository","value":"$REPO","inline":true},{"name":"Job","value":"keep-supabase-active","inline":true},{"name":"Actor","value":"$ACTOR","inline":true},{"name":"Commit","value":"${SHA:0:7}","inline":true},{"name":"Run URL","value":"$RUN_URL","inline":false},{"name":"Error (truncated)","value":"$ERROR_TRUNC","inline":false}],"timestamp":"$TS"}]}
+EOF
+)
           curl -s -H "Content-Type: application/json" -d "$payload" "$DISCORD_WEBHOOK"
         shell: bash
