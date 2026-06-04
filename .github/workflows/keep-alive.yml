@@ -1,0 +1,29 @@
+name: Keep live deployment warm
+
+on:
+  schedule:
+    - cron: '0 0 */4 * *' # every 4 days at midnight UTC
+  workflow_dispatch:
+
+jobs:
+  keep-supabase-active:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Keep Supabase active
+        run: node .github/scripts/supabase-keep-alive.js
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SHARED_LIST_ID: ${{ secrets.SHARED_LIST_ID }}
