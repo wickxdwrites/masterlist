@@ -5,9 +5,9 @@ Standalone React + Vite project for tracking personal edit logs and revisions.
 ## Features
 
 - Local-first storage using browser localStorage
+- Optional shared cloud sync via Supabase for live collaboration
 - Add, filter, search, and sort edit entries
 - Status tracking (open/closed)
-- Export and import JSON backup files
 
 ## Run locally
 
@@ -17,6 +17,18 @@ Standalone React + Vite project for tracking personal edit logs and revisions.
    npm run dev
 3. Build for production:
    npm run build
+
+## Enable Shared Live Sync (Supabase)
+
+1. Create a Supabase project.
+2. In Supabase SQL editor, run [supabase/schema.sql](supabase/schema.sql).
+3. Copy [.env.example](.env.example) to `.env` and fill:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+   - `VITE_SHARED_LIST_ID` (same value for both collaborators)
+4. Redeploy.
+
+If env vars are missing, the app automatically falls back to local-only mode.
 
 ## GitHub setup
 

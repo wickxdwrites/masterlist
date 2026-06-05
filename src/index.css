@@ -1,12 +1,14 @@
 :root {
-  --ink: #20211f;
-  --muted: #5f675f;
-  --paper: #f2efe7;
-  --panel: rgba(255, 255, 255, 0.85);
-  --line: #cbc5b7;
-  --brand: #2f748c;
-  --cloud: #e8eef0;
-  --danger: #ad4747;
+  --ink: #0f1b35;
+  --muted: #5a6783;
+  --paper: #f4f7ff;
+  --panel: rgba(255, 255, 255, 0.82);
+  --line: #c2d3f0;
+  --brand: #0b7cff;
+  --brand2: #7c3aed;
+  --cloud: #e7f0ff;
+  --danger: #d95468;
+  --glow: rgba(11, 124, 255, 0.22);
 
   --sans: 'Space Grotesk', 'Avenir Next', 'Segoe UI', sans-serif;
   --mono: 'IBM Plex Mono', 'Consolas', monospace;
@@ -22,13 +24,53 @@ body {
   color: var(--ink);
   font: 16px/1.45 var(--sans);
   background:
-    radial-gradient(circle at 12% 18%, rgba(179, 214, 220, 0.6), transparent 30%),
-    radial-gradient(circle at 88% 9%, rgba(255, 215, 172, 0.6), transparent 25%),
-    linear-gradient(180deg, #f8f5ed, #ece7d9);
+    radial-gradient(ellipse at 5% 10%, rgba(16, 201, 204, 0.38), transparent 35%),
+    radial-gradient(ellipse at 95% 5%, rgba(255, 100, 190, 0.38), transparent 30%),
+    radial-gradient(ellipse at 80% 90%, rgba(124, 58, 237, 0.32), transparent 35%),
+    radial-gradient(ellipse at 15% 80%, rgba(11, 124, 255, 0.28), transparent 30%),
+    linear-gradient(165deg, #eef4ff 0%, #e8f0ff 50%, #f5f0ff 100%);
+  background-attachment: fixed;
+  overflow-x: hidden;
+}
+
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  filter: blur(80px);
+  opacity: 0.55;
+  animation: drift 18s ease-in-out infinite alternate;
+}
+
+body::before {
+  width: 600px;
+  height: 600px;
+  top: -120px;
+  left: -160px;
+  background: radial-gradient(circle, rgba(11, 124, 255, 0.35), transparent 70%);
+}
+
+body::after {
+  width: 500px;
+  height: 500px;
+  bottom: -100px;
+  right: -120px;
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.38), transparent 70%);
+  animation-delay: -9s;
+}
+
+@keyframes drift {
+  from { transform: translate(0, 0) scale(1); }
+  to   { transform: translate(40px, 30px) scale(1.08); }
 }
 
 #root {
   min-height: 100svh;
+  position: relative;
+  z-index: 1;
 }
 
 h1,
@@ -49,4 +91,18 @@ h1 {
 
 h2 {
   font-size: clamp(1.1rem, 2.2vw, 1.45rem);
+}
+
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #0b7cff, #7c3aed);
+  border-radius: 99px;
 }

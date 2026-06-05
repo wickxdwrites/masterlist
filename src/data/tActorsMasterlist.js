@@ -1,0 +1,101 @@
+const MASTERLIST_DATE = '2026-04-21'
+const TACTORS_CATEGORY = 'Thai Actors and Actresses'
+
+const actors = [
+  'Mario Maurer',
+  'Nadech Kugimiya',
+  'Prin Suparat',
+  'Weir Sukollawat',
+  'Pope Thanawat',
+  'James Jirayu',
+  'Tor Thanapob',
+  'Sunny Suwanmethanont',
+  'Ananda Everingham',
+  'Ken Theeradeth',
+  'Jespipat Tilapornputt',
+  'Apo Nattawin',
+  'Mile Phakphum',
+  'Bible Wichapas',
+  'Jeff Satur',
+  'Bright Vachirawit',
+  'Win Metawin',
+  'Gulf Kanawut',
+  'Mew Suppasit',
+  'Saint Suppapong',
+  'Zee Pruk',
+  'Nunew Chawarin',
+  'Max Nattapol',
+  'Tul Pakorn',
+  'Off Jumpol',
+  'Gun Atthaphan',
+  'Krist Perawat',
+  'Singto Prachaya',
+  'Ohm Pawat',
+  'Nanon Korapat',
+  'Tay Tawan',
+  'New Thitipoom',
+  'Earth Pirapat',
+  'Mix Sahaphap',
+  'Force Jiratchapong',
+  'Book Kasidet',
+  'Joong Archen',
+  'Dunk Natachai',
+  'Boss Chaikamon',
+  'Noeul Nuttarat',
+]
+
+const actresses = [
+  'Yaya Urassaya',
+  'Davika Hoorne',
+  'Baifern Pimchanok',
+  'Chompoo Araya',
+  'Kimberley Anne Woltemas',
+  'Anne Thongprasom',
+  'Aum Patchrapa',
+  'Mai Davika',
+  'Mook Worranit',
+  'Tu Tontawan',
+  'Namtan Tipnaree',
+  'Film Rachanun',
+  'Milk Pansa',
+  'Love Pattranite',
+  'Punpun Sutatta',
+  'Aom Sushar',
+  'Kao Supassara',
+  'Pearwah Nichaphat',
+  'Jan Ployshompoo',
+  'Eye Kamolned',
+]
+
+const slugify = (value) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+
+export const TACTORS_MASTERLIST_ENTRIES = [
+  ...actors.map((name) => ({
+    id: `tactor-${slugify(name)}`,
+    date: MASTERLIST_DATE,
+    name,
+    specialty: 'Actor',
+    category: TACTORS_CATEGORY,
+    members: '',
+    isSoloist: true,
+    done: false,
+    notes: '',
+    tags: 'masterlist',
+  })),
+  ...actresses.map((name) => ({
+    id: `tactress-${slugify(name)}`,
+    date: MASTERLIST_DATE,
+    name,
+    specialty: 'Actress',
+    category: TACTORS_CATEGORY,
+    members: '',
+    isSoloist: true,
+    done: false,
+    notes: '',
+    tags: 'masterlist',
+  })),
+]
