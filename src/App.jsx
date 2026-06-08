@@ -239,17 +239,8 @@ const setLocalStorageSafe = (key, value) => {
     window.localStorage.setItem(key, value)
     return true
   } catch (err) {
-    const name = err?.name || ''
-    const code = err?.code
-    if (
-      name === 'QuotaExceededError' ||
-      name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
-      code === 22 ||
-      code === 1014
-    ) {
-      return false
-    }
-    throw err
+    console.warn('localStorage.setItem failed', err)
+    return false
   }
 }
 
@@ -503,12 +494,7 @@ function App() {
       }
 
       const merged = mergeMasterlists(localEntries)
-      let safeEntries = merged
-
-      if (!supabase) {
-        safeEntries = await migrateLocalDataUrlsToIndexedDB(merged)
-      }
-
+      const safeEntries = await migrateLocalDataUrlsToIndexedDB(merged)
       setEntries(safeEntries)
 
       // If cloud is available, try migrating any base64 images to Supabase storage
