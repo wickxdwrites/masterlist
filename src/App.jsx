@@ -118,17 +118,120 @@ const specialtyPillClass = (specialty) => {
   return 'file-pill file-pill-default'
 }
 
-const getImageExtension = (dataUrl) => {
-  const mimeMatch = /^data:(image\/[a-zA-Z0-9+.-]+);base64,/.exec(dataUrl)
-  const mimeType = mimeMatch?.[1] || ''
+const getImageExtension = (image) => {
+  if (typeof image === 'string') {
+    const mimeMatch = /^data:(image\/[a-zA-Z0-9+.-]+);base64,/.exec(image)
+    const mimeType = mimeMatch?.[1] || ''
 
-  if (mimeType.includes('png')) return 'png'
-  if (mimeType.includes('jpeg') || mimeType.includes('jpg')) return 'jpg'
-  if (mimeType.includes('webp')) return 'webp'
-  if (mimeType.includes('gif')) return 'gif'
+    if (mimeType.includes('png')) return 'png'
+    if (mimeType.includes('jpeg') || mimeType.includes('jpg')) return 'jpg'
+    if (mimeType.includes('webp')) return 'webp'
+    if (mimeType.includes('gif')) return 'gif'
+    return 'img'
+  }
+
+  if (image && typeof image === 'object') {
+    const mimeType = image.mime || ''
+    if (mimeType.includes('png')) return 'png'
+    if (mimeType.includes('jpeg') || mimeType.includes('jpg')) return 'jpg'
+    if (mimeType.includes('webp')) return 'webp'
+    if (mimeType.includes('gif')) return 'gif'
+    if (typeof image.filename === 'string') {
+      const ext = image.filename.split('.').pop()
+      return ext || 'img'
+    }
+  }
 
   return 'img'
 }
+
+const IDB_DB_NAME = 'edits-vault-images'
+const IDB_STORE_NAME = 'images'
+
+const openImageDB = () =>
+  new Promise((resolve, reject) => {
+    const request = window.indexedDB.open(IDB_DB_NAME, 1)
+    request.onupgradeneeded = () => {
+      const db = request.result
+      if (!db.objectStoreNames.contains(IDB_STORE_NAME)) {
+        db.createObjectStore(IDB_STORE_NAME, { keyPath: 'key' })
+      }
+    }
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+
+const withImageDB = async (callback) => {
+  const db = await openImageDB()
+  try {
+    return await callback(db)
+  } finally {
+    db.close()
+  }
+}
+
+const saveImageToDB = async (blob, filename) => {
+  try {
+    const key = `img-${crypto.randomUUID()}`
+    await withImageDB(
+      (db) =>
+        new Promise((resolve, reject) => {
+          const tx = db.transaction(IDB_STORE_NAME, 'readwrite')
+          const store = tx.objectStore(IDB_STORE_NAME)
+          const request = store.add({
+            key,
+            blob,
+            filename,
+            mime: blob.type || 'image/jpeg',
+            createdAt: Date.now(),
+          })
+          request.onsuccess = () => resolve()
+          request.onerror = () => reject(request.error)
+        }),
+    )
+    return { storageType: 'idb', key, filename, mime: blob.type || 'image/jpeg' }
+  } catch {
+    return null
+  }
+}
+
+const getImageFromDB = async (key) => {
+  try {
+    return await withImageDB(
+      (db) =>
+        new Promise((resolve, reject) => {
+          const tx = db.transaction(IDB_STORE_NAME, 'readonly')
+          const request = tx.objectStore(IDB_STORE_NAME).get(key)
+          request.onsuccess = () => resolve(request.result?.blob || null)
+          request.onerror = () => reject(request.error)
+        }),
+    )
+  } catch {
+    return null
+  }
+}
+
+const deleteImageFromDB = async (key) => {
+  try {
+    await withImageDB(
+      (db) =>
+        new Promise((resolve, reject) => {
+          const tx = db.transaction(IDB_STORE_NAME, 'readwrite')
+          const request = tx.objectStore(IDB_STORE_NAME).delete(key)
+          request.onsuccess = () => resolve()
+          request.onerror = () => reject(request.error)
+        }),
+    )
+  } catch {
+    // ignore
+  }
+}
+
+const isIndexedDbImage = (image) =>
+  image &&
+  typeof image === 'object' &&
+  image.storageType === 'idb' &&
+  typeof image.key === 'string'
 
 // Safe localStorage setter that handles quota exceeded errors
 const setLocalStorageSafe = (key, value) => {
@@ -192,6 +295,68 @@ const dataUrlToFile = (dataUrl, filename) => {
   } catch (err) {
     return null
   }
+}
+
+const getDataUrlSize = (dataUrl) => {
+  const base64 = String(dataUrl).split(',')[1] || ''
+  const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0
+  return Math.ceil((base64.length * 3) / 4) - padding
+}
+
+const readFileToDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(new Error('Failed to read file'))
+    reader.readAsDataURL(file)
+  })
+
+const loadImage = (src) =>
+  new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = reject
+    img.src = src
+  })
+
+const canvasToBlob = (canvas, type, quality) =>
+  new Promise((resolve) => canvas.toBlob(resolve, type, quality))
+
+const compressImageFileToBlob = async (file, maxBytes) => {
+  if (!file.type.startsWith('image/')) return file
+
+  const dataUrl = await readFileToDataUrl(file)
+  const image = await loadImage(dataUrl)
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')
+  let scale = Math.min(1, Math.sqrt(maxBytes / file.size))
+  scale = Math.max(scale, 0.2)
+
+  while (scale >= 0.2) {
+    const width = Math.max(1, Math.round(image.width * scale))
+    const height = Math.max(1, Math.round(image.height * scale))
+    canvas.width = width
+    canvas.height = height
+    ctx.drawImage(image, 0, 0, width, height)
+
+    let quality = 0.9
+    while (quality >= 0.3) {
+      // eslint-disable-next-line no-await-in-loop
+      const blob = await canvasToBlob(canvas, 'image/jpeg', quality)
+      if (!blob) {
+        quality -= 0.1
+        continue
+      }
+      if (blob.size <= maxBytes) {
+        return blob
+      }
+      quality -= 0.1
+    }
+
+    scale *= 0.85
+  }
+
+  return file
 }
 
 const migrateLocalBase64Images = async (entriesArray) => {
@@ -264,6 +429,7 @@ function App() {
   const [sortDirection, setSortDirection] = useState('desc')
   const [specialtyFilter, setSpecialtyFilter] = useState(ALL_SPECIALTIES)
   const [visibleImageSections, setVisibleImageSections] = useState({})
+  const [localImageUrls, setLocalImageUrls] = useState({})
   const [addModalOpen, setAddModalOpen] = useState(false)
   const [newForm, setNewForm] = useState({
     name: '',
@@ -406,25 +572,31 @@ function App() {
     }
   }, [])
 
+  const removeLocalImageDataUrls = (entryList) =>
+    entryList.map((entry) => ({
+      ...entry,
+      editImages: (entry.editImages || []).filter((img) => !String(img).startsWith('data:')),
+    }))
+
   useEffect(() => {
     if (!hasHydrated) return
 
     const serialized = JSON.stringify(entries)
     const ok = setLocalStorageSafe(STORAGE_KEY, serialized)
     if (!ok) {
-      // attempt to remove large base64 data URLs from entries and persist a cleaned copy
-      const cleaned = entries.map((e) => ({
-        ...e,
-        editImages: (e.editImages || []).filter((img) => !String(img).startsWith('data:')),
-      }))
-      try {
-        setLocalStorageSafe(STORAGE_KEY, JSON.stringify(cleaned))
-      } catch {
-        // ignore if still failing
+      const cleaned = removeLocalImageDataUrls(entries)
+      const cleanedOk = setLocalStorageSafe(STORAGE_KEY, JSON.stringify(cleaned))
+
+      if (!cleanedOk) {
+        const emptied = cleaned.map((entry) => ({ ...entry, editImages: [] }))
+        window.localStorage.removeItem(STORAGE_KEY)
+        setEntries(emptied)
+      } else {
+        setEntries(cleaned)
       }
-      setEntries(cleaned)
-      // Inform the user that local storage couldn't hold images
-      alert('Local storage quota exceeded — large images were removed from local storage. Enable cloud sync to store photos.')
+
+      console.warn('Local storage quota exceeded; removed embedded image data URLs.')
+      alert('Local storage quota exceeded — embedded images were removed from storage. Use smaller photos or enable cloud sync to preserve uploads.')
     }
 
     if (!supabase) return
@@ -539,51 +711,105 @@ function App() {
     )
   }
 
+  useEffect(() => {
+    const localRefs = entries.flatMap((entry) =>
+      (entry.editImages || []).filter(isIndexedDbImage),
+    )
+
+    const missingRefs = localRefs.filter(
+      (ref) => ref && !localImageUrls[ref.key],
+    )
+    if (missingRefs.length === 0) return
+
+    let isActive = true
+    ;(async () => {
+      const urls = {}
+      for (const ref of missingRefs) {
+        try {
+          const blob = await getImageFromDB(ref.key)
+          if (blob && isActive) {
+            urls[ref.key] = URL.createObjectURL(blob)
+          }
+        } catch {
+          // ignore failed loads
+        }
+      }
+      if (isActive && Object.keys(urls).length > 0) {
+        setLocalImageUrls((current) => ({ ...current, ...urls }))
+      }
+    })()
+
+    return () => {
+      isActive = false
+    }
+  }, [entries, localImageUrls])
+
+  const getImageSrc = (image) =>
+    typeof image === 'string' ? image : localImageUrls[image.key] || ''
+
+  const getImageDownloadName = (entry, image, index) => {
+    if (typeof image === 'string') {
+      return `${toSafeFileName(entry.name)}-edit-${index + 1}.${getImageExtension(image)}`
+    }
+    return image.filename || `${toSafeFileName(entry.name)}-edit-${index + 1}.${getImageExtension(image)}`
+  }
+
   const uploadEditImages = async (id, event) => {
-    const files = Array.from(event.target.files || [])
+    const input = event.currentTarget
+    const files = Array.from(input.files || [])
     if (files.length === 0) return
 
-    if (supabase) {
-      // Upload each file to Supabase Storage and add returned public URLs
-      const uploads = await Promise.all(files.map((file) => uploadFileToSupabase(file, id)))
-      const urls = uploads.map((r) => r?.url).filter(Boolean)
-      if (urls.length > 0) {
-        addImagesToEntry(id, urls)
-      }
-    } else {
-      // Local-only fallback: avoid storing very large files in localStorage
-      const MAX_LOCAL_FILE_BYTES = 500 * 1024 // 500KB
-      const allowed = files.filter((f) => f.size <= MAX_LOCAL_FILE_BYTES)
-      const rejectedCount = files.length - allowed.length
-      if (rejectedCount > 0) {
-        alert(`${rejectedCount} file(s) too large for local storage. Use smaller images or enable cloud sync.`)
-      }
+    try {
+      if (supabase) {
+        // Upload each file to Supabase Storage and add returned public URLs
+        const uploads = await Promise.all(files.map((file) => uploadFileToSupabase(file, id)))
+        const urls = uploads.map((r) => r?.url).filter(Boolean)
+        if (urls.length > 0) {
+          addImagesToEntry(id, urls)
+        }
+      } else {
+        // Local-only fallback: store large images in IndexedDB rather than localStorage
+        const MAX_LOCAL_IMAGE_BYTES = 1024 * 1024 // 1MB
 
-      try {
-        const images = await Promise.all(
-          allowed.map(
-            (file) =>
-              new Promise((resolve, reject) => {
-                const reader = new FileReader()
-                reader.onload = () => resolve(String(reader.result || ''))
-                reader.onerror = () => reject(new Error('Failed to read file'))
-                reader.readAsDataURL(file)
-              }),
-          ),
-        )
-        addImagesToEntry(id, images.filter(Boolean))
-      } catch {
-        // ignore errors reading files
+        try {
+          const imageRefs = await Promise.all(
+            files.map(async (file) => {
+              const blob = await compressImageFileToBlob(file, MAX_LOCAL_IMAGE_BYTES)
+              return await saveImageToDB(blob, file.name)
+            }),
+          )
+          const validRefs = imageRefs.filter(Boolean)
+          const rejectedCount = files.length - validRefs.length
+          if (rejectedCount > 0) {
+            alert(`${rejectedCount} file(s) could not be stored locally. Use smaller images or enable cloud sync.`)
+          }
+          addImagesToEntry(id, validRefs)
+        } catch (error) {
+          console.error('Local image storage failed', error)
+          alert('Unable to store selected images locally. Use smaller files or enable cloud sync.')
+        }
       }
+    } catch (error) {
+      console.error('Image upload failed', error)
+    } finally {
+      input.value = ''
     }
-
-    event.target.value = ''
   }
 
   const deleteImageFromEntry = (id, imageIndex) => {
     const confirmed = window.confirm('Are you sure you want to delete this photo')
     if (!confirmed) {
       return
+    }
+
+    const entry = entries.find((entry) => entry.id === id)
+    const image = entry?.editImages?.[imageIndex]
+    if (isIndexedDbImage(image)) {
+      deleteImageFromDB(image.key)
+      setLocalImageUrls((current) => {
+        const { [image.key]: _, ...rest } = current
+        return rest
+      })
     }
 
     setEntries((current) =>
@@ -821,16 +1047,37 @@ function App() {
                           >
                             ×
                           </button>
-                          <a href={image} target="_blank" rel="noreferrer">
-                            <img src={image} alt={`${entry.name} edit ${index + 1}`} />
+                          <a
+                            href={
+                              typeof image === 'string'
+                                ? image
+                                : localImageUrls[image.key] || '#'
+                            }
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <img
+                              src={
+                                typeof image === 'string'
+                                  ? image
+                                  : localImageUrls[image.key] || ''
+                              }
+                              alt={`${entry.name} edit ${index + 1}`}
+                            />
                           </a>
                         </div>
                         <a
                           className="download-link"
-                          href={image}
-                          download={`${toSafeFileName(entry.name)}-edit-${
-                            index + 1
-                          }.${getImageExtension(image)}`}
+                          href={
+                            typeof image === 'string'
+                              ? image
+                              : localImageUrls[image.key] || '#'
+                          }
+                          download={
+                            typeof image === 'string'
+                              ? `${toSafeFileName(entry.name)}-edit-${index + 1}.${getImageExtension(image)}`
+                              : image.filename || `${toSafeFileName(entry.name)}-edit-${index + 1}.${getImageExtension(image)}`
+                          }
                         >
                           Download
                         </a>
