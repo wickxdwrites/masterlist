@@ -239,8 +239,14 @@ const setLocalStorageSafe = (key, value) => {
     window.localStorage.setItem(key, value)
     return true
   } catch (err) {
-    if (err && err.name === 'QuotaExceededError') {
-      // Do not throw — caller should handle fallback behavior
+    const name = err?.name || ''
+    const code = err?.code
+    if (
+      name === 'QuotaExceededError' ||
+      name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+      code === 22 ||
+      code === 1014
+    ) {
       return false
     }
     throw err
@@ -395,6 +401,42 @@ const migrateLocalBase64Images = async (entriesArray) => {
   return results
 }
 
+const migrateLocalDataUrlsToIndexedDB = async (entriesArray) => {
+  if (!window.indexedDB) return entriesArray
+
+  let changed = false
+  const results = await Promise.all(entriesArray.map(async (entry) => {
+    if (!entry.editImages || !Array.isArray(entry.editImages)) return entry
+
+    const newImages = await Promise.all(entry.editImages.map(async (img, idx) => {
+      if (typeof img === 'string' && img.startsWith('data:')) {
+        const ext = getImageExtension(img)
+        const filename = `${toSafeFileName(entry.name)}-local-${idx + 1}.${ext}`
+        const file = dataUrlToFile(img, filename)
+        if (!file) return null
+        const ref = await saveImageToDB(file, filename)
+        if (!ref) return null
+        changed = true
+        return ref
+      }
+      return img
+    }))
+
+    return {
+      ...entry,
+      editImages: newImages.filter(Boolean),
+    }
+  }))
+
+  if (changed) {
+    try {
+      setLocalStorageSafe(STORAGE_KEY, JSON.stringify(results))
+    } catch {}
+  }
+
+  return results
+}
+
 const mergeMasterlists = (currentEntries) => {
   const currentKeys = new Set(
     currentEntries.map((entry) => `${entry.category}::${entry.name.toLowerCase()}`),
@@ -451,7 +493,7 @@ function App() {
       }
     }
 
-    const hydrateFromLocal = () => {
+    const hydrateFromLocal = async () => {
       const localEntries = readLocalEntries()
       if (!localEntries) {
         setEntries(SEEDED_MASTERLIST_ENTRIES.map(normalizeEntry))
@@ -461,11 +503,17 @@ function App() {
       }
 
       const merged = mergeMasterlists(localEntries)
-      setEntries(merged)
+      let safeEntries = merged
+
+      if (!supabase) {
+        safeEntries = await migrateLocalDataUrlsToIndexedDB(merged)
+      }
+
+      setEntries(safeEntries)
 
       // If cloud is available, try migrating any base64 images to Supabase storage
       if (supabase) {
-        migrateLocalBase64Images(merged).then((updated) => {
+        migrateLocalBase64Images(safeEntries).then((updated) => {
           if (Array.isArray(updated)) {
             setEntries(updated)
             setLocalStorageSafe(STORAGE_KEY, JSON.stringify(updated))
@@ -581,22 +629,15 @@ function App() {
   useEffect(() => {
     if (!hasHydrated) return
 
-    const serialized = JSON.stringify(entries)
+    const safeEntries = removeLocalImageDataUrls(entries)
+    const serialized = JSON.stringify(safeEntries)
     const ok = setLocalStorageSafe(STORAGE_KEY, serialized)
     if (!ok) {
-      const cleaned = removeLocalImageDataUrls(entries)
-      const cleanedOk = setLocalStorageSafe(STORAGE_KEY, JSON.stringify(cleaned))
-
-      if (!cleanedOk) {
-        const emptied = cleaned.map((entry) => ({ ...entry, editImages: [] }))
-        window.localStorage.removeItem(STORAGE_KEY)
-        setEntries(emptied)
-      } else {
-        setEntries(cleaned)
-      }
-
-      console.warn('Local storage quota exceeded; removed embedded image data URLs.')
-      alert('Local storage quota exceeded — embedded images were removed from storage. Use smaller photos or enable cloud sync to preserve uploads.')
+      const emptied = safeEntries.map((entry) => ({ ...entry, editImages: [] }))
+      window.localStorage.removeItem(STORAGE_KEY)
+      setEntries(emptied)
+      console.warn('Local storage quota exceeded; removed embedded image data URLs and cleared saved edits.')
+      alert('Local storage quota exceeded — embedded image data URLs were removed. Use smaller photos or enable cloud sync to preserve uploads.')
     }
 
     if (!supabase) return
